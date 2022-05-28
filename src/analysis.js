@@ -133,6 +133,7 @@ async function analysis() {
     totalAmountEarned: Number(maxCash['earn'].toFixed(2))
   }
   
+  return outputObj;
 }
 
 module.exports = analysis;
