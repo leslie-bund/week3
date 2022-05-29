@@ -93,7 +93,6 @@ async function analysis() {
     try {
       drvPersonalInfo.push(await getDriver(key));
     } catch (error) {
-      console.log(error);
       continue;
     }
   }
@@ -104,7 +103,7 @@ async function analysis() {
   }
 
   // // Put in the mostTripsBydriver and highestEarningDriver properties
-  // For MaxTrips
+  // For driver with MaxTrips
   const {
     name: mxTrpName,
     email: mxTrpEmail,
@@ -132,8 +131,6 @@ async function analysis() {
     noOfTrips: maxCash['trpCnt'],
     totalAmountEarned: Number(maxCash['earn'].toFixed(2))
   }
-  
   return outputObj;
 }
-
 module.exports = analysis;
