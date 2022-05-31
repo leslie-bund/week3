@@ -7,12 +7,6 @@ const { getTrips, getDriver } = require('api');
  * @returns {any} Trip data analysis
  */
 async function analysis() {
-  // Your code goes here
-  // Get the trips data from the imported functions
-  let tripsArr;
-  await getTrips().then(data => tripsArr = data.slice());
-  // let tripsArr = await  getTrips();
-
   // Prepare an output object to be returned by the analysis function.
   const outputObj = {
     noOfCashTrips: 0,
@@ -24,44 +18,9 @@ async function analysis() {
     mostTripsByDriver: {},
     highestEarningDriver: {}
   };
-
   // Capture all driver information
   const drvInfoByTrips = {};
-  const drvPersonalInfo = [];
-  // Loop through the trips data and populate some fields in the output object
-  tripsArr.forEach((element) => {
-    const {
-      billedAmount: bA,
-      driverID: dI,
-    } = element;
-    const moni = Number(bA) || Number(bA.split(',').join(''));
-
-    // Populate the drvInfoByTrips
-    if (Object.keys(drvInfoByTrips).includes(dI)) {
-      drvInfoByTrips[dI]['tripCount'] += 1;
-      drvInfoByTrips[dI]['earnings'] += moni;
-    } else {
-      drvInfoByTrips[dI] = {};
-      drvInfoByTrips[dI]['tripCount'] = 1;
-      drvInfoByTrips[dI]['earnings'] = moni;
-    }
-    // Populate the outputObj
-    outputObj['billedTotal'] += moni;
-    if (element.isCash) {
-      outputObj['noOfCashTrips'] += 1;
-      outputObj['cashBilledTotal'] += moni;
-    } else {
-      outputObj['noOfNonCashTrips'] += 1;
-      outputObj['nonCashBilledTotal'] += moni;
-    }
-
-  });
-
-  // Arithemetic accuracy adjustment
-  for (const objs in outputObj) {
-    // outputObj[objs] = Math.round(outputObj[objs]);
-    outputObj[objs] = Math.round(outputObj[objs] * 100) / 100;
-  }
+  const driverInfo = [];
 
   // Find the maximum trips by driver and maximum earning by driver
   const maxTrip = {
@@ -69,52 +28,87 @@ async function analysis() {
     earn: 0,
     iD: '',
   };
-  
   const maxCash = {
     trpCnt: 0,
     earn: 0,
     iD: '',
   };
+  // Loop through the trips data and populate some fields in the output object
+  for (let trip of await getTrips()) {
+    // Destructure the trip data
+    const {
+      billedAmount: bA,
+      driverID: dI,
+      isCash: csh,
+    } = trip;
+    // Get the amount billed for each transaction in number format
+    const moni = Number(bA) || Number(bA.split(',').join(''));
+    // Populate the drvInfoByTrips
+    if (Object.keys(drvInfoByTrips).includes(dI)) {
+      drvInfoByTrips[dI]['tripCount'] += 1;
+      drvInfoByTrips[dI]['earnings'] += moni;
+      // Arithemetic correction each drivers earnings
+      drvInfoByTrips[dI]['earnings'] = Math.round(drvInfoByTrips[dI]['earnings'] * 100) / 100;
+    } else {
+      drvInfoByTrips[dI] = {};
+      drvInfoByTrips[dI]['tripCount'] = 1;
+      drvInfoByTrips[dI]['earnings'] = moni;
 
-  for (const key in drvInfoByTrips) {
+      // Push the promises into driverInfo Array
+      driverInfo.push(getDriver(dI));
+    }
+
+    // Populate the outputObj
+    outputObj['billedTotal'] += moni;
+    outputObj['billedTotal'] = Math.round(outputObj['billedTotal'] * 100) / 100;
+
+    if (csh) {
+      outputObj['noOfCashTrips'] += 1;
+      outputObj['cashBilledTotal'] += moni;
+      // Arithemetic correction of cashBilledtotal
+      outputObj['cashBilledTotal'] = Math.round(outputObj['cashBilledTotal'] * 100) / 100;
+    } else {
+      outputObj['noOfNonCashTrips'] += 1;
+      outputObj['nonCashBilledTotal'] += moni;
+      // Arithemetic correction of nonCashBilledTotal
+      outputObj['nonCashBilledTotal'] = Math.round(outputObj['nonCashBilledTotal'] * 100) / 100;
+    }
     //Check for max trips
-      if (drvInfoByTrips[key]['tripCount'] > maxTrip['trpCnt']) {
-        maxTrip['trpCnt'] = drvInfoByTrips[key]['tripCount'];
-        maxTrip['earn'] = drvInfoByTrips[key]['earnings'];
-        maxTrip['iD'] = key;
-      }
+    if (drvInfoByTrips[dI]['tripCount'] >= maxTrip['trpCnt']) {
+      maxTrip['trpCnt'] = drvInfoByTrips[dI]['tripCount'];
+      maxTrip['earn'] = drvInfoByTrips[dI]['earnings'];
+      maxTrip['iD'] = dI;
+    }
     // Check for max cash
-    if (drvInfoByTrips[key]['earnings'] > maxCash['earn']) {
-      maxCash['trpCnt'] = drvInfoByTrips[key]['tripCount'];
-      maxCash['earn'] = drvInfoByTrips[key]['earnings'];
-      maxCash['iD'] = key;
+    if (drvInfoByTrips[dI]['earnings'] > maxCash['earn']) {
+      maxCash['trpCnt'] = drvInfoByTrips[dI]['tripCount'];
+      maxCash['earn'] = drvInfoByTrips[dI]['earnings'];
+      maxCash['iD'] = dI;
     }
-    // Get Drivers personal details
-    try {
-      drvPersonalInfo.push(await getDriver(key));
-    } catch (error) {
-      continue;
-    }
-  }
-  
-  // Find drivers with more than one vehicle
-  for (const {vehicleID: vID} of drvPersonalInfo) {
-    if (vID.length > 1) outputObj['noOfDriversWithMoreThanOneVehicle'] += 1;
   }
 
-  // // Put in the mostTripsBydriver and highestEarningDriver properties
-  // For driver with MaxTrips
-  const {
-    name: mxTrpName,
-    email: mxTrpEmail,
-    phone: mxTrpPhone,
-  } = await getDriver(maxTrip['iD']);
-  // For MaxCash
-  const {
-    name: mxCshName,
-    email: mxCshEmail,
-    phone: mxCshPhone,
-  } = await getDriver(maxCash['iD']);
+  const drivers = await Promise.allSettled(driverInfo);
+  
+  for (const driver of drivers){
+    if (driver['status'] === 'fulfilled') {
+      driver['value']['vehicleID'].length > 1 ? outputObj['noOfDriversWithMoreThanOneVehicle'] += 1 : null;
+    }
+  }
+
+  // Put in the mostTripsBydriver and highestEarningDriver properties
+  const [{ value: {
+              name: mxTrpName,
+              email: mxTrpEmail,
+              phone: mxTrpPhone,
+            }
+          },
+          { value: {
+              name: mxCshName,
+              email: mxCshEmail,
+              phone: mxCshPhone,
+            }
+          }] = await Promise.allSettled([getDriver(maxTrip['iD']), getDriver(maxCash['iD'])])
+          
 
   // Finishing up on the output object
   outputObj['mostTripsByDriver'] = {
@@ -131,6 +125,7 @@ async function analysis() {
     noOfTrips: maxCash['trpCnt'],
     totalAmountEarned: Number(maxCash['earn'].toFixed(2))
   }
+
   return outputObj;
 }
 module.exports = analysis;
